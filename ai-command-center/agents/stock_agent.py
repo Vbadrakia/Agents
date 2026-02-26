@@ -1,5 +1,11 @@
+import sys
+import os
 import yfinance as yf
 from datetime import datetime
+
+# Add parent directory to path so we can import stock_learner from project root
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from stock_learner import (
     record_stock_data,
     record_news_sentiment,

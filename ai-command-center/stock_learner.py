@@ -5,9 +5,8 @@ Stores historical data in memory.json and builds prediction models over time.
 
 import json
 import os
-import math
 from datetime import datetime, timedelta
-from collections import defaultdict
+from typing import Any, Dict, List, Tuple
 
 MEMORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memory.json")
 
@@ -33,7 +32,7 @@ NEGATIVE_WORDS = {
     "delay", "failure", "reject", "lawsuit", "bankrupt", "collapse"
 }
 
-SECTOR_KEYWORDS = {
+SECTOR_KEYWORDS: Dict[str, List[str]] = {
     "tech": ["AI", "artificial intelligence", "technology", "software", "cloud",
              "semiconductor", "chip", "digital", "automation", "data"],
     "aviation": ["airline", "aviation", "flight", "airport", "travel", "tourism",
@@ -45,13 +44,12 @@ SECTOR_KEYWORDS = {
 }
 
 
-def analyze_sentiment(text):
+def analyze_sentiment(text: str) -> float:
     """Analyze sentiment of text. Returns score from -1.0 to 1.0."""
     if not text:
         return 0.0
 
     words = text.lower().split()
-    text_lower = text.lower()
 
     pos_count = sum(1 for w in words if w.strip(".,!?;:") in POSITIVE_WORDS)
     neg_count = sum(1 for w in words if w.strip(".,!?;:") in NEGATIVE_WORDS)
@@ -64,10 +62,10 @@ def analyze_sentiment(text):
     return round(score, 3)
 
 
-def detect_relevant_sectors(text):
+def detect_relevant_sectors(text: str) -> List[str]:
     """Detect which sectors a news headline is relevant to."""
     text_lower = text.lower()
-    relevant = []
+    relevant: List[str] = []
     for sector, keywords in SECTOR_KEYWORDS.items():
         for kw in keywords:
             if kw.lower() in text_lower:
@@ -78,20 +76,13 @@ def detect_relevant_sectors(text):
 
 # ─── Memory Management ───
 
-def load_memory():
-    """Load learning memory from JSON file."""
-    if os.path.exists(MEMORY_FILE):
-        try:
-            with open(MEMORY_FILE, "r") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-
+def _default_memory() -> Dict[str, Any]:
+    """Return default empty memory structure."""
     return {
-        "stock_history": {},      # {symbol: [{date, price, change_pct}]}
-        "news_sentiment": [],     # [{date, headline, sentiment, sectors}]
-        "correlations": {},       # {symbol: {avg_sentiment_before_up, avg_sentiment_before_down, ...}}
-        "predictions_log": [],    # [{date, symbol, predicted, actual, correct}]
+        "stock_history": {},
+        "news_sentiment": [],
+        "correlations": {},
+        "predictions_log": [],
         "learning_stats": {
             "total_days": 0,
             "correct_predictions": 0,
@@ -101,7 +92,20 @@ def load_memory():
     }
 
 
-def save_memory(memory):
+def load_memory() -> Dict[str, Any]:
+    """Load learning memory from JSON file."""
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, "r") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except (json.JSONDecodeError, IOError):
+            pass
+    return _default_memory()
+
+
+def save_memory(memory: Dict[str, Any]) -> None:
     """Save learning memory to JSON file."""
     try:
         with open(MEMORY_FILE, "w") as f:
@@ -112,72 +116,84 @@ def save_memory(memory):
 
 # ─── Learning Engine ───
 
-def record_stock_data(symbol, price, change_pct):
+def record_stock_data(symbol: str, price: float, change_pct: float) -> None:
     """Record daily stock data point."""
     memory = load_memory()
     today = datetime.now().strftime("%Y-%m-%d")
 
-    if symbol not in memory["stock_history"]:
-        memory["stock_history"][symbol] = []
+    stock_history: Dict[str, List[Dict[str, Any]]] = memory.get("stock_history", {})
+    if symbol not in stock_history:
+        stock_history[symbol] = []
 
     # Avoid duplicate entries for same day
-    existing_dates = [d["date"] for d in memory["stock_history"][symbol]]
+    existing_dates = [d["date"] for d in stock_history[symbol]]
     if today not in existing_dates:
-        memory["stock_history"][symbol].append({
+        stock_history[symbol].append({
             "date": today,
             "price": round(price, 2),
             "change_pct": round(change_pct, 3)
         })
 
         # Keep last 365 days of data
-        memory["stock_history"][symbol] = memory["stock_history"][symbol][-365:]
+        stock_history[symbol] = stock_history[symbol][-365:]
 
-    memory["learning_stats"]["last_updated"] = today
-    memory["learning_stats"]["total_days"] = len(
-        set(d["date"] for sym in memory["stock_history"] for d in memory["stock_history"][sym])
+    memory["stock_history"] = stock_history
+
+    stats: Dict[str, Any] = memory.get("learning_stats", {})
+    stats["last_updated"] = today
+    stats["total_days"] = len(
+        set(d["date"] for sym in stock_history for d in stock_history[sym])
     )
+    memory["learning_stats"] = stats
 
     save_memory(memory)
 
 
-def record_news_sentiment(headlines):
+def record_news_sentiment(headlines: List[str]) -> None:
     """Record news headlines with sentiment analysis."""
     memory = load_memory()
     today = datetime.now().strftime("%Y-%m-%d")
+
+    news_list: List[Dict[str, Any]] = memory.get("news_sentiment", [])
 
     for headline in headlines:
         sentiment = analyze_sentiment(headline)
         sectors = detect_relevant_sectors(headline)
 
-        memory["news_sentiment"].append({
+        news_list.append({
             "date": today,
-            "headline": headline[:200],  # Truncate long headlines
+            "headline": headline[:200],
             "sentiment": sentiment,
             "sectors": sectors
         })
 
     # Keep last 365 days of news
     cutoff = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-    memory["news_sentiment"] = [n for n in memory["news_sentiment"] if n["date"] >= cutoff]
+    news_list = [n for n in news_list if n["date"] >= cutoff]
 
+    memory["news_sentiment"] = news_list
     save_memory(memory)
 
 
-def learn_correlations():
+def learn_correlations() -> Dict[str, Any]:
     """
     Analyze historical data to find correlations between news sentiment and stock movements.
     This is the 'self-learning' core — it gets smarter with more data.
     """
     memory = load_memory()
 
-    for symbol in memory["stock_history"]:
-        history = memory["stock_history"][symbol]
+    stock_history: Dict[str, List[Dict[str, Any]]] = memory.get("stock_history", {})
+    news_sentiment: List[Dict[str, Any]] = memory.get("news_sentiment", [])
+    correlations: Dict[str, Any] = memory.get("correlations", {})
+
+    for symbol in stock_history:
+        history = stock_history[symbol]
         if len(history) < 3:
             continue
 
-        up_sentiments = []
-        down_sentiments = []
-        neutral_sentiments = []
+        up_sentiments: List[float] = []
+        down_sentiments: List[float] = []
+        neutral_sentiments: List[float] = []
 
         for i in range(1, len(history)):
             current = history[i]
@@ -186,7 +202,7 @@ def learn_correlations():
             # Get average news sentiment for the day before
             prev_date = history[i - 1]["date"]
             day_sentiments = [
-                n["sentiment"] for n in memory["news_sentiment"]
+                n["sentiment"] for n in news_sentiment
                 if n["date"] == prev_date or n["date"] == date
             ]
 
@@ -202,7 +218,7 @@ def learn_correlations():
             else:
                 neutral_sentiments.append(avg_sentiment)
 
-        correlation = {
+        correlation: Dict[str, Any] = {
             "data_points": len(history),
             "avg_sentiment_before_up": round(sum(up_sentiments) / len(up_sentiments), 3) if up_sentiments else 0,
             "avg_sentiment_before_down": round(sum(down_sentiments) / len(down_sentiments), 3) if down_sentiments else 0,
@@ -218,13 +234,14 @@ def learn_correlations():
             impact = abs(correlation["avg_sentiment_before_up"] - correlation["avg_sentiment_before_down"])
             correlation["sentiment_impact_score"] = round(impact, 3)
 
-        memory["correlations"][symbol] = correlation
+        correlations[symbol] = correlation
 
+    memory["correlations"] = correlations
     save_memory(memory)
-    return memory["correlations"]
+    return correlations
 
 
-def predict_movement(symbol):
+def predict_movement(symbol: str) -> Tuple[str, float, str]:
     """
     Predict stock movement based on learned correlations and current news sentiment.
     Returns: (direction, confidence%, reasoning)
@@ -235,8 +252,9 @@ def predict_movement(symbol):
     today = datetime.now().strftime("%Y-%m-%d")
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
+    news_sentiment: List[Dict[str, Any]] = memory.get("news_sentiment", [])
     recent_sentiments = [
-        n["sentiment"] for n in memory["news_sentiment"]
+        n["sentiment"] for n in news_sentiment
         if n["date"] >= yesterday
     ]
 
@@ -246,11 +264,13 @@ def predict_movement(symbol):
     current_sentiment = sum(recent_sentiments) / len(recent_sentiments)
 
     # Check if we have learned correlations
-    if symbol not in memory.get("correlations", {}):
+    correlations: Dict[str, Any] = memory.get("correlations", {})
+    if symbol not in correlations:
         learn_correlations()
         memory = load_memory()
+        correlations = memory.get("correlations", {})
 
-    corr = memory.get("correlations", {}).get(symbol, None)
+    corr = correlations.get(symbol, None)
 
     if not corr or corr.get("data_points", 0) < 3:
         data_points = corr["data_points"] if corr else 0
@@ -277,7 +297,7 @@ def predict_movement(symbol):
         direction = "SIDEWAYS ➡️"
 
     # Calculate confidence (based on data quantity + impact score)
-    data_confidence = min(corr["data_points"] / 60, 1.0)  # Maxes out at 60 days
+    data_confidence = min(corr["data_points"] / 60, 1.0)
     pattern_confidence = min(impact_score * 2, 1.0)
     raw_confidence = (data_confidence * 0.4 + pattern_confidence * 0.6) * 100
 
@@ -299,39 +319,42 @@ def predict_movement(symbol):
     )
 
     # Log prediction for future accuracy tracking
-    memory["predictions_log"].append({
+    predictions_log: List[Dict[str, Any]] = memory.get("predictions_log", [])
+    predictions_log.append({
         "date": today,
         "symbol": symbol,
         "predicted_direction": direction,
         "confidence": confidence,
         "news_sentiment": round(current_sentiment, 3)
     })
-    memory["predictions_log"] = memory["predictions_log"][-500:]  # Keep last 500
+    memory["predictions_log"] = predictions_log[-500:]
     save_memory(memory)
 
     return direction, confidence, reasoning
 
 
-def verify_past_predictions():
+def verify_past_predictions() -> Dict[str, Any]:
     """Check past predictions against actual results to track accuracy."""
     memory = load_memory()
 
     verified = 0
     correct = 0
 
-    for pred in memory["predictions_log"]:
+    predictions_log: List[Dict[str, Any]] = memory.get("predictions_log", [])
+    stock_history: Dict[str, List[Dict[str, Any]]] = memory.get("stock_history", {})
+
+    for pred in predictions_log:
         if pred.get("verified"):
             continue
 
         symbol = pred["symbol"]
         pred_date = pred["date"]
-        history = memory["stock_history"].get(symbol, [])
+        history = stock_history.get(symbol, [])
 
         # Find the actual movement on the predicted date
         for h in history:
             if h["date"] > pred_date:
-                actual_direction = "UP 📈" if h["change_pct"] > 0 else "DOWN 📉"
-                pred["actual_direction"] = actual_direction
+                pred["actual_direction"] = "UP 📈" if h["change_pct"] > 0 else "DOWN 📉"
                 pred["actual_change"] = h["change_pct"]
                 pred["correct"] = (
                     ("UP" in pred["predicted_direction"] and h["change_pct"] > 0) or
@@ -344,27 +367,34 @@ def verify_past_predictions():
                 break
 
     if verified > 0:
-        total_verified = sum(1 for p in memory["predictions_log"] if p.get("verified"))
-        total_correct = sum(1 for p in memory["predictions_log"] if p.get("correct"))
-        memory["learning_stats"]["total_predictions"] = total_verified
-        memory["learning_stats"]["correct_predictions"] = total_correct
+        total_verified = sum(1 for p in predictions_log if p.get("verified"))
+        total_correct = sum(1 for p in predictions_log if p.get("correct"))
+        stats: Dict[str, Any] = memory.get("learning_stats", {})
+        stats["total_predictions"] = total_verified
+        stats["correct_predictions"] = total_correct
+        memory["learning_stats"] = stats
+        memory["predictions_log"] = predictions_log
         save_memory(memory)
 
-    return memory["learning_stats"]
+    return memory.get("learning_stats", {})
 
 
-def get_learning_summary():
+def get_learning_summary() -> str:
     """Get a summary of what the AI has learned so far."""
     memory = load_memory()
-    stats = memory["learning_stats"]
+    stats: Dict[str, Any] = memory.get("learning_stats", {})
 
-    total_stocks = len(memory["stock_history"])
-    total_data = sum(len(v) for v in memory["stock_history"].values())
-    total_news = len(memory["news_sentiment"])
+    stock_history: Dict[str, List[Dict[str, Any]]] = memory.get("stock_history", {})
+    total_stocks = len(stock_history)
+    total_data = sum(len(v) for v in stock_history.values())
+    total_news = len(memory.get("news_sentiment", []))
+
+    total_predictions = stats.get("total_predictions", 0)
+    correct_predictions = stats.get("correct_predictions", 0)
 
     accuracy = 0
-    if stats["total_predictions"] > 0:
-        accuracy = round(stats["correct_predictions"] / stats["total_predictions"] * 100, 1)
+    if total_predictions > 0:
+        accuracy = round(correct_predictions / total_predictions * 100, 1)
 
     summary = (
         f"🧠 AI Learning Status\n"
@@ -372,9 +402,9 @@ def get_learning_summary():
         f"📊 Stocks tracked: {total_stocks}\n"
         f"📈 Data points: {total_data}\n"
         f"📰 News analyzed: {total_news}\n"
-        f"🎯 Predictions made: {stats['total_predictions']}\n"
+        f"🎯 Predictions made: {total_predictions}\n"
         f"✅ Accuracy: {accuracy}%\n"
-        f"📅 Days of learning: {stats['total_days']}\n"
+        f"📅 Days of learning: {stats.get('total_days', 0)}\n"
         f"🕐 Last updated: {stats.get('last_updated', 'Never')}"
     )
 

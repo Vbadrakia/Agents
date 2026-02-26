@@ -5,7 +5,7 @@ import time
 import requests
 
 from config import BOT_TOKEN, CHAT_ID
-from agents.stock_agent import get_stock_update, get_stock_predictions, get_full_stock_report
+from agents.stock_agent import get_stock_update, get_stock_predictions
 from agents.news_agent import get_news_update, get_news_headlines
 from agents.job_agent import get_job_updates
 from notion_logger import log_to_notion
