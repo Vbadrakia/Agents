@@ -2,7 +2,7 @@ from notion_client import Client
 from datetime import datetime
 from config import NOTION_TOKEN, NOTION_DB_ID
 
-def log_to_notion(stock, news, jobs):
+def log_to_notion(stock, news):
     """Logs daily report to Notion database."""
     if not NOTION_TOKEN or not NOTION_DB_ID:
         print("Notion credentials not configured. Skipping log.")
@@ -38,16 +38,6 @@ def log_to_notion(stock, news, jobs):
                     "object": "block",
                     "type": "paragraph",
                     "paragraph": {"rich_text": [{"text": {"content": news}}]},
-                },
-                {
-                    "object": "block",
-                    "type": "heading_2",
-                    "heading_2": {"rich_text": [{"text": {"content": "Job Updates"}}]},
-                },
-                {
-                    "object": "block",
-                    "type": "paragraph",
-                    "paragraph": {"rich_text": [{"text": {"content": jobs}}]},
                 },
             ],
         )

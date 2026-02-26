@@ -1,93 +1,129 @@
-import sys
-import os
+# agents/stock_agent.py
+
 import yfinance as yf
+import pandas as pd
 from datetime import datetime
 
-# Add parent directory to path so we can import stock_learner from project root
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PORTFOLIO = ["SPICEJET.NS", "TCS.NS", "INFY.NS"]
 
-from stock_learner import (
-    record_stock_data,
-    record_news_sentiment,
-    predict_movement,
-    learn_correlations,
-    verify_past_predictions,
-    get_learning_summary
-)
 
-# ─── Your Portfolio (add/remove stocks here) ───
-TRACKED_STOCKS = ["TCS.NS", "INFY.NS", "SPICEJET.NS"]
+def analyze_stock(symbol):
+    """Analyze stock using Moving Averages (MA20 vs MA50) for trend detection."""
+    stock = yf.Ticker(symbol)
+    data = stock.history(period="3mo")
+
+    if len(data) < 30:
+        return "Not enough data", data.iloc[-1]["Close"] if len(data) > 0 else 0
+
+    data["MA20"] = data["Close"].rolling(20).mean()
+    data["MA50"] = data["Close"].rolling(50).mean()
+
+    latest = data.iloc[-1]
+
+    if pd.notna(latest["MA20"]) and pd.notna(latest["MA50"]):
+        if latest["MA20"] > latest["MA50"]:
+            trend = "Bullish 📈"
+        else:
+            trend = "Bearish 📉"
+    else:
+        trend = "Neutral ➡️"
+
+    return trend, latest["Close"]
 
 
 def get_stock_update():
-    """Fetches stock data and feeds it to the learning engine."""
-    today = datetime.now().strftime("%d-%m-%Y")
-    result = f"📊 Portfolio Update ({today})\n"
+    """Fetches stock prices with smart trend analysis."""
+    message = f"📊 Smart Portfolio Analysis ({datetime.now().strftime('%d-%m-%Y')})\n\n"
 
-    for symbol in TRACKED_STOCKS:
+    for symbol in PORTFOLIO:
         try:
-            ticker = yf.Ticker(symbol)
-            data = ticker.history(period="2d")
+            stock = yf.Ticker(symbol)
 
-            if len(data) >= 2:
-                prev_close = data['Close'].iloc[-2]
-                curr_close = data['Close'].iloc[-1]
-                change = ((curr_close - prev_close) / prev_close) * 100
-                emoji = "🔺" if change >= 0 else "🔻"
-                result += f"\n{symbol}\n₹{curr_close:.2f} {emoji} {change:+.2f}%\n"
+            # Use 5 days to ensure data exists even if market is closed
+            data = stock.history(period="5d")
 
-                # Feed data to learning engine
-                record_stock_data(symbol, curr_close, change)
+            if len(data) == 0:
+                message += f"{symbol} → No data available\n\n"
+                continue
 
-            elif len(data) == 1:
-                curr_close = data['Close'].iloc[-1]
-                result += f"\n{symbol}\n₹{curr_close:.2f}\n"
-                record_stock_data(symbol, curr_close, 0)
+            latest = data.iloc[-1]
+            current = latest["Close"]
+            open_price = latest["Open"]
 
-            else:
-                result += f"\n{symbol}: No data available\n"
+            change = current - open_price
+            percent = (change / open_price) * 100
+
+            arrow = "🔺" if change > 0 else "🔻"
+
+            # Get trend analysis
+            trend, _ = analyze_stock(symbol)
+
+            message += f"{symbol}\n₹{current:.2f} {arrow} {percent:.2f}%\nTrend: {trend}\n\n"
 
         except Exception as e:
-            result += f"\n{symbol}: Error - {str(e)}\n"
+            message += f"{symbol} → Error fetching data\n\n"
 
-    # Verify past predictions & update accuracy
-    verify_past_predictions()
-
-    return result
+    return message
 
 
 def get_stock_predictions(news_headlines=None):
-    """
-    Get AI predictions for all tracked stocks.
-    Call this after feeding news headlines for best results.
-    """
-    # Feed news to learning engine if provided
-    if news_headlines:
-        record_news_sentiment(news_headlines)
-
-    # Re-learn correlations with new data
-    learn_correlations()
-
+    """Get smart stock predictions based on moving average analysis."""
     today = datetime.now().strftime("%d-%m-%Y")
-    result = f"🔮 AI Stock Predictions ({today})\n"
+    result = f"🔮 Smart Stock Analysis ({today})\n"
     result += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 
-    for symbol in TRACKED_STOCKS:
-        direction, confidence, reasoning = predict_movement(symbol)
-        result += f"\n📌 {symbol}\n"
-        result += f"   Prediction: {direction}\n"
-        result += f"   Confidence: {confidence}%\n"
-        result += f"   {reasoning}\n"
-        result += "─────────────────────────────\n"
+    for symbol in PORTFOLIO:
+        try:
+            stock = yf.Ticker(symbol)
+            data = stock.history(period="3mo")
 
-    # Add learning summary
-    result += f"\n{get_learning_summary()}"
+            if len(data) < 30:
+                result += f"\n📌 {symbol}\n   Not enough data for analysis\n"
+                result += "─────────────────────────────\n"
+                continue
+
+            data["MA20"] = data["Close"].rolling(20).mean()
+            data["MA50"] = data["Close"].rolling(50).mean()
+            data["MA7"] = data["Close"].rolling(7).mean()
+
+            latest = data.iloc[-1]
+            current = latest["Close"]
+
+            # Trend detection
+            if pd.notna(latest["MA20"]) and pd.notna(latest["MA50"]):
+                if latest["MA20"] > latest["MA50"]:
+                    trend = "Bullish 📈"
+                    recommendation = "BUY / HOLD"
+                else:
+                    trend = "Bearish 📉"
+                    recommendation = "SELL / WAIT"
+            else:
+                trend = "Neutral ➡️"
+                recommendation = "HOLD"
+
+            # 7-day momentum
+            if pd.notna(latest["MA7"]):
+                if current > latest["MA7"]:
+                    momentum = "Strong ⬆️"
+                else:
+                    momentum = "Weak ⬇️"
+            else:
+                momentum = "N/A"
+
+            # Volume analysis
+            avg_vol = data["Volume"].tail(20).mean()
+            latest_vol = latest["Volume"]
+            vol_change = ((latest_vol - avg_vol) / avg_vol * 100) if avg_vol > 0 else 0
+
+            result += f"\n📌 {symbol} — ₹{current:.2f}\n"
+            result += f"   MA20 vs MA50 Trend: {trend}\n"
+            result += f"   7-Day Momentum: {momentum}\n"
+            result += f"   Volume vs Avg: {vol_change:+.1f}%\n"
+            result += f"   💡 Recommendation: {recommendation}\n"
+            result += "─────────────────────────────\n"
+
+        except Exception as e:
+            result += f"\n📌 {symbol}\n   Error: {str(e)}\n"
+            result += "─────────────────────────────\n"
 
     return result
-
-
-def get_full_stock_report(news_headlines=None):
-    """Get complete report: current prices + predictions + learning status."""
-    prices = get_stock_update()
-    predictions = get_stock_predictions(news_headlines)
-    return f"{prices}\n\n{predictions}"
