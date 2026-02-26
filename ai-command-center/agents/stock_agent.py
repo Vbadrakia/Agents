@@ -6,29 +6,35 @@ from datetime import datetime
 
 PORTFOLIO = ["SPICEJET.NS", "TCS.NS", "INFY.NS"]
 
+# Cache stock data to avoid multiple API calls per page load
+_stock_cache = {}
+_cache_date = None
 
-def analyze_stock(symbol):
-    """Analyze stock using Moving Averages (MA20 vs MA50) for trend detection."""
-    stock = yf.Ticker(symbol)
-    data = stock.history(period="3mo")
 
-    if len(data) < 30:
-        return "Not enough data", data.iloc[-1]["Close"] if len(data) > 0 else 0
+def _fetch_stock_data(symbol):
+    """Fetch stock data with caching to avoid duplicate API calls."""
+    global _stock_cache, _cache_date
 
-    data["MA20"] = data["Close"].rolling(20).mean()
-    data["MA50"] = data["Close"].rolling(50).mean()
+    today = datetime.now().strftime("%Y-%m-%d")
 
-    latest = data.iloc[-1]
+    # Return cache if already fetched today
+    if _cache_date == today and symbol in _stock_cache:
+        return _stock_cache[symbol]
 
-    if pd.notna(latest["MA20"]) and pd.notna(latest["MA50"]):
-        if latest["MA20"] > latest["MA50"]:
-            trend = "Bullish 📈"
-        else:
-            trend = "Bearish 📉"
-    else:
-        trend = "Neutral ➡️"
+    # Reset cache for new day
+    if _cache_date != today:
+        _stock_cache = {}
+        _cache_date = today
 
-    return trend, latest["Close"]
+    try:
+        stock = yf.Ticker(symbol)
+        # Use 6mo to have enough data for MA50 (need 50+ trading days)
+        data = stock.history(period="6mo")
+        _stock_cache[symbol] = data
+        return data
+    except Exception as e:
+        print(f"Error fetching {symbol}: {e}")
+        return pd.DataFrame()
 
 
 def get_stock_update():
@@ -37,10 +43,7 @@ def get_stock_update():
 
     for symbol in PORTFOLIO:
         try:
-            stock = yf.Ticker(symbol)
-
-            # Use 5 days to ensure data exists even if market is closed
-            data = stock.history(period="5d")
+            data = _fetch_stock_data(symbol)
 
             if len(data) == 0:
                 message += f"{symbol} → No data available\n\n"
@@ -55,13 +58,26 @@ def get_stock_update():
 
             arrow = "🔺" if change > 0 else "🔻"
 
-            # Get trend analysis
-            trend, _ = analyze_stock(symbol)
+            # Get trend from MA analysis (uses cached data, no extra API call)
+            trend = "N/A"
+            if len(data) >= 50:
+                data_copy = data.copy()
+                data_copy["MA20"] = data_copy["Close"].rolling(20).mean()
+                data_copy["MA50"] = data_copy["Close"].rolling(50).mean()
+                last = data_copy.iloc[-1]
+                if pd.notna(last["MA20"]) and pd.notna(last["MA50"]):
+                    trend = "Bullish 📈" if last["MA20"] > last["MA50"] else "Bearish 📉"
+            elif len(data) >= 20:
+                data_copy = data.copy()
+                data_copy["MA20"] = data_copy["Close"].rolling(20).mean()
+                last = data_copy.iloc[-1]
+                if pd.notna(last["MA20"]):
+                    trend = "Bullish 📈" if current > last["MA20"] else "Bearish 📉"
 
             message += f"{symbol}\n₹{current:.2f} {arrow} {percent:.2f}%\nTrend: {trend}\n\n"
 
         except Exception as e:
-            message += f"{symbol} → Error fetching data\n\n"
+            message += f"{symbol} → Error: {str(e)}\n\n"
 
     return message
 
@@ -74,50 +90,66 @@ def get_stock_predictions(news_headlines=None):
 
     for symbol in PORTFOLIO:
         try:
-            stock = yf.Ticker(symbol)
-            data = stock.history(period="3mo")
+            # Uses cached data — no extra API call
+            data = _fetch_stock_data(symbol)
 
-            if len(data) < 30:
+            if len(data) < 20:
                 result += f"\n📌 {symbol}\n   Not enough data for analysis\n"
                 result += "─────────────────────────────\n"
                 continue
 
-            data["MA20"] = data["Close"].rolling(20).mean()
-            data["MA50"] = data["Close"].rolling(50).mean()
-            data["MA7"] = data["Close"].rolling(7).mean()
+            data_copy = data.copy()
+            data_copy["MA7"] = data_copy["Close"].rolling(7).mean()
+            data_copy["MA20"] = data_copy["Close"].rolling(20).mean()
 
-            latest = data.iloc[-1]
+            latest = data_copy.iloc[-1]
             current = latest["Close"]
 
             # Trend detection
-            if pd.notna(latest["MA20"]) and pd.notna(latest["MA50"]):
-                if latest["MA20"] > latest["MA50"]:
+            trend = "Neutral ➡️"
+            recommendation = "HOLD"
+
+            if len(data) >= 50:
+                data_copy["MA50"] = data_copy["Close"].rolling(50).mean()
+                latest = data_copy.iloc[-1]
+
+                if pd.notna(latest["MA20"]) and pd.notna(latest["MA50"]):
+                    if latest["MA20"] > latest["MA50"]:
+                        trend = "Bullish 📈"
+                        recommendation = "BUY / HOLD"
+                    else:
+                        trend = "Bearish 📉"
+                        recommendation = "SELL / WAIT"
+            elif pd.notna(latest["MA20"]):
+                if current > latest["MA20"]:
                     trend = "Bullish 📈"
                     recommendation = "BUY / HOLD"
                 else:
                     trend = "Bearish 📉"
                     recommendation = "SELL / WAIT"
-            else:
-                trend = "Neutral ➡️"
-                recommendation = "HOLD"
 
             # 7-day momentum
+            momentum = "N/A"
             if pd.notna(latest["MA7"]):
-                if current > latest["MA7"]:
-                    momentum = "Strong ⬆️"
-                else:
-                    momentum = "Weak ⬇️"
-            else:
-                momentum = "N/A"
+                momentum = "Strong ⬆️" if current > latest["MA7"] else "Weak ⬇️"
 
             # Volume analysis
             avg_vol = data["Volume"].tail(20).mean()
-            latest_vol = latest["Volume"]
+            latest_vol = data.iloc[-1]["Volume"]
             vol_change = ((latest_vol - avg_vol) / avg_vol * 100) if avg_vol > 0 else 0
 
+            # Price change (last 7 days)
+            if len(data) >= 7:
+                week_ago_price = data.iloc[-7]["Close"]
+                weekly_change = ((current - week_ago_price) / week_ago_price) * 100
+                weekly_str = f"{weekly_change:+.2f}%"
+            else:
+                weekly_str = "N/A"
+
             result += f"\n📌 {symbol} — ₹{current:.2f}\n"
-            result += f"   MA20 vs MA50 Trend: {trend}\n"
+            result += f"   MA Trend: {trend}\n"
             result += f"   7-Day Momentum: {momentum}\n"
+            result += f"   Weekly Change: {weekly_str}\n"
             result += f"   Volume vs Avg: {vol_change:+.1f}%\n"
             result += f"   💡 Recommendation: {recommendation}\n"
             result += "─────────────────────────────\n"
