@@ -5,10 +5,11 @@ import time
 import requests
 
 from config import BOT_TOKEN, CHAT_ID
-from agents.stock_agent import get_stock_update
-from agents.news_agent import get_news_update
+from agents.stock_agent import get_stock_update, get_stock_predictions, get_full_stock_report
+from agents.news_agent import get_news_update, get_news_headlines
 from agents.job_agent import get_job_updates
 from notion_logger import log_to_notion
+from stock_learner import record_news_sentiment
 
 app = Flask(__name__)
 
@@ -21,6 +22,11 @@ def daily_report():
     stock = get_stock_update()
     news = get_news_update()
     jobs = get_job_updates()
+
+    # Feed news headlines to the learning engine
+    headlines = get_news_headlines()
+    if headlines:
+        record_news_sentiment(headlines)
 
     final = f"{stock}\n\n{news}\n\n{jobs}"
     send_message(final)
@@ -40,7 +46,18 @@ def dashboard():
     stock = get_stock_update()
     news = get_news_update()
     jobs = get_job_updates()
-    return render_template("dashboard.html", stock=stock, news=news, jobs=jobs)
+
+    # Feed news to learner & get predictions
+    headlines = get_news_headlines()
+    predictions = get_stock_predictions(headlines)
+
+    return render_template("dashboard.html", stock=stock, news=news, jobs=jobs, predictions=predictions)
+
+@app.route("/predictions")
+def predictions_page():
+    headlines = get_news_headlines()
+    predictions = get_stock_predictions(headlines)
+    return f"<pre>{predictions}</pre>"
 
 @app.route("/run-now")
 def run_now():

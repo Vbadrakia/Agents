@@ -33,6 +33,15 @@
             font-size: 1.5em;
             margin-bottom: 15px;
         }
+        .section.predictions {
+            border: 1px solid rgba(123, 47, 247, 0.3);
+            background: rgba(123, 47, 247, 0.05);
+        }
+        .section.predictions h2 {
+            background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bff6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
         pre {
             white-space: pre-wrap;
             word-wrap: break-word;
@@ -40,6 +49,12 @@
             font-size: 0.95em;
             line-height: 1.6;
             color: #c0c0c0;
+        }
+        .refresh-note {
+            text-align: center;
+            color: #666;
+            font-size: 0.85em;
+            margin-top: 20px;
         }
     </style>
 </head>
@@ -51,6 +66,11 @@
         <pre>{{ stock }}</pre>
     </div>
 
+    <div class="section predictions">
+        <h2>🔮 AI Predictions</h2>
+        <pre>{{ predictions }}</pre>
+    </div>
+
     <div class="section">
         <h2>📰 News</h2>
         <pre>{{ news }}</pre>
@@ -60,5 +80,7 @@
         <h2>💼 Jobs</h2>
         <pre>{{ jobs }}</pre>
     </div>
+
+    <p class="refresh-note">AI learns more with each visit. Check back daily for smarter predictions.</p>
 </body>
 </html>
