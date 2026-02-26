@@ -28,6 +28,7 @@
             padding: 25px;
             margin-bottom: 25px;
             backdrop-filter: blur(10px);
+            animation: fadeIn 0.5s ease-in;
         }
         .section h2 {
             font-size: 1.5em;
@@ -56,9 +57,47 @@
             font-size: 0.85em;
             margin-top: 20px;
         }
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, #0a0a2e, #1a1a4e, #0a0a2e);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .spinner {
+            width: 50px; height: 50px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top: 4px solid #7b2ff7;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        .loading-text {
+            font-size: 1.2em;
+            color: #7b2ff7;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
+    <!-- Loading screen (shown while server fetches data) -->
+    <div class="loading-overlay" id="loader">
+        <div class="spinner"></div>
+        <div class="loading-text">🚀 Loading AI Command Center...</div>
+    </div>
+
     <h1>🚀 AI Command Center</h1>
 
     <div class="section">
@@ -76,6 +115,13 @@
         <pre>{{ news }}</pre>
     </div>
 
-    <p class="refresh-note">AI learns more with each visit. Check back daily for smarter predictions.</p>
+    <p class="refresh-note">Data refreshes daily. Powered by yfinance + global RSS feeds.</p>
+
+    <script>
+        // Hide loader once page is fully rendered
+        window.addEventListener('load', function() {
+            document.getElementById('loader').classList.add('hidden');
+        });
+    </script>
 </body>
 </html>
