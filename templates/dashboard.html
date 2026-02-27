@@ -61,6 +61,28 @@
             font-size: 0.85em;
             margin-top: 20px;
         }
+        .live-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: rgba(0, 255, 100, 0.05);
+            border: 1px solid rgba(0, 255, 100, 0.2);
+            border-radius: 10px;
+            margin-bottom: 15px;
+            font-weight: bold;
+            color: #00ff64;
+            font-size: 0.9em;
+        }
+        .live-dot {
+            width: 10px;
+            height: 10px;
+            background: #00ff64;
+            border-radius: 50%;
+            animation: livePulse 1.5s ease-in-out infinite;
+            box-shadow: 0 0 8px #00ff64;
+        }
+        @keyframes livePulse { 0%, 100% { opacity: 1; box-shadow: 0 0 8px #00ff64; } 50% { opacity: 0.4; box-shadow: 0 0 2px #00ff64; } }
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -83,17 +105,28 @@
         <pre id="news" class="loading">⏳ Fetching global news...</pre>
     </div>
 
-    <p class="refresh-note">Data refreshes daily. Powered by yfinance + global RSS feeds.</p>
+    <div class="live-bar">
+        <span class="live-dot"></span>
+        <span>LIVE</span>
+        <span id="last-update" style="margin-left: auto; font-size: 0.8em; color: #888;">Updating...</span>
+    </div>
+
+    <p class="refresh-note">Prices refresh every 30s. Powered by yfinance + global RSS feeds.</p>
 
     <script>
-        // Load each section independently via API
-        function loadSection(url, elementId) {
+        // Load a section via API with optional flash animation
+        function loadSection(url, elementId, flash) {
             fetch(url)
                 .then(response => response.text())
                 .then(data => {
                     const el = document.getElementById(elementId);
                     el.textContent = data;
                     el.classList.remove('loading');
+                    if (flash) {
+                        el.style.transition = 'opacity 0.3s';
+                        el.style.opacity = '0.5';
+                        setTimeout(() => { el.style.opacity = '1'; }, 300);
+                    }
                 })
                 .catch(err => {
                     const el = document.getElementById(elementId);
@@ -102,10 +135,30 @@
                 });
         }
 
-        // Fire all 3 requests at the same time (parallel loading)
-        loadSection('/api/stocks', 'stock');
-        loadSection('/api/news', 'news');
-        loadSection('/api/predictions', 'predictions');
+        function updateTimestamp() {
+            document.getElementById('last-update').textContent =
+                'Last updated: ' + new Date().toLocaleTimeString();
+        }
+
+        // Initial load — all 3 in parallel
+        loadSection('/api/stocks', 'stock', false);
+        loadSection('/api/news', 'news', false);
+        loadSection('/api/predictions', 'predictions', false);
+
+        // Auto-refresh stocks & predictions every 30 seconds
+        setInterval(() => {
+            loadSection('/api/stocks', 'stock', true);
+            loadSection('/api/predictions', 'predictions', true);
+            updateTimestamp();
+        }, 30000);
+
+        // Refresh news every 5 minutes
+        setInterval(() => {
+            loadSection('/api/news', 'news', true);
+        }, 300000);
+
+        // Set initial timestamp
+        setTimeout(updateTimestamp, 3000);
     </script>
 </body>
 </html>

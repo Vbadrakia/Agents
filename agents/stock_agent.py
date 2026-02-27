@@ -3,34 +3,32 @@
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
+import time
 
-PORTFOLIO = ["TCS.NS", "INFY.NS", "SPICEJET.NS"]
+PORTFOLIO = ["TCS.NS", "INFY.NS", "SPICEJET.BO"]
 
-# Cache stock data to avoid multiple API calls per page load
+# Cache stock data with TTL (seconds) to avoid excessive API calls
 _stock_cache = {}
-_cache_date = None
+_cache_timestamps = {}  # Per-symbol timestamp
+CACHE_TTL = 60  # Refresh every 60 seconds for live prices
 
 
-def _fetch_stock_data(symbol):
-    """Fetch stock data with caching to avoid duplicate API calls."""
-    global _stock_cache, _cache_date
+def _fetch_stock_data(symbol, period="1d"):
+    """Fetch stock data with TTL-based caching for live prices."""
+    global _stock_cache, _cache_timestamps
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    cache_key = f"{symbol}_{period}"
+    now = time.time()
 
-    # Return cache if already fetched today
-    if _cache_date == today and symbol in _stock_cache:
-        return _stock_cache[symbol]
-
-    # Reset cache for new day
-    if _cache_date != today:
-        _stock_cache = {}
-        _cache_date = today
+    # Return cache if still fresh
+    if cache_key in _stock_cache and (now - _cache_timestamps.get(cache_key, 0)) < CACHE_TTL:
+        return _stock_cache[cache_key]
 
     try:
         stock = yf.Ticker(symbol)
-        # Use 6mo to have enough data for MA50 (need 50+ trading days)
-        data = stock.history(period="6mo")
-        _stock_cache[symbol] = data
+        data = stock.history(period=period)
+        _stock_cache[cache_key] = data
+        _cache_timestamps[cache_key] = now
         return data
     except Exception as e:
         print(f"Error fetching {symbol}: {e}")
@@ -38,12 +36,12 @@ def _fetch_stock_data(symbol):
 
 
 def get_stock_update():
-    """Fetches stock prices with smart trend analysis."""
-    message = f"📊 Smart Portfolio Analysis ({datetime.now().strftime('%d-%m-%Y')})\n\n"
+    """Fetches live stock prices with smart trend analysis."""
+    message = f"📊 Live Portfolio ({datetime.now().strftime('%d-%m-%Y %H:%M:%S')})\n\n"
 
     for symbol in PORTFOLIO:
         try:
-            data = _fetch_stock_data(symbol)
+            data = _fetch_stock_data(symbol, period="5d")
 
             if len(data) == 0:
                 message += f"{symbol} → No data available\n\n"
@@ -90,8 +88,8 @@ def get_stock_predictions(news_headlines=None):
 
     for symbol in PORTFOLIO:
         try:
-            # Uses cached data — no extra API call
-            data = _fetch_stock_data(symbol)
+            # Uses 6mo data for MA analysis
+            data = _fetch_stock_data(symbol, period="6mo")
 
             if len(data) < 20:
                 result += f"\n📌 {symbol}\n   Not enough data for analysis\n"
