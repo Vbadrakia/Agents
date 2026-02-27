@@ -5,7 +5,6 @@ import requests
 from config import BOT_TOKEN, CHAT_ID
 from agents.stock_agent import get_stock_update
 from agents.news_agent import get_news_update
-from agents.job_agent import get_job_updates
 from notion_logger import log_to_notion
 
 
@@ -18,12 +17,11 @@ def send_message(message):
 def daily_report():
     stock = get_stock_update()
     news = get_news_update()
-    jobs = get_job_updates()
 
-    final = f"{stock}\n\n{news}\n\n{jobs}"
+    final = f"{stock}\n\n{news}"
 
     send_message(final)
-    log_to_notion(stock, news, jobs)
+    log_to_notion(stock, news)
 
 
 schedule.every().day.at("09:00").do(daily_report)
