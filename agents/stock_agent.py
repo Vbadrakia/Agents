@@ -4,7 +4,7 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 
-PORTFOLIO = ["SPICEJET.NS", "TCS.NS", "INFY.NS"]
+PORTFOLIO = ["TCS.NS", "INFY.NS"]
 
 # Cache stock data to avoid multiple API calls per page load
 _stock_cache = {}
