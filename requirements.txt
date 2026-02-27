@@ -7,3 +7,6 @@ gunicorn
 schedule
 python-dotenv
 pandas
+google-generativeai
+PyPDF2
+beautifulsoup4

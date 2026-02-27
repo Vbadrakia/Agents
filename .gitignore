@@ -1,2 +1,4 @@
 .env
 memory.json
+knowledge_db/
+knowledge_db.json

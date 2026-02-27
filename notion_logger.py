@@ -2,7 +2,7 @@ from notion_client import Client
 from datetime import datetime
 from config import NOTION_TOKEN, NOTION_DB_ID
 
-def log_to_notion(stock, news):
+def log_to_notion(stock, news, ai_analysis=None):
     """Logs daily report to Notion database."""
     if not NOTION_TOKEN or not NOTION_DB_ID:
         print("Notion credentials not configured. Skipping log.")
@@ -12,34 +12,55 @@ def log_to_notion(stock, news):
         notion = Client(auth=NOTION_TOKEN)
         today = datetime.now().strftime("%Y-%m-%d")
 
+        children = [
+            {
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {"rich_text": [{"text": {"content": "Stock Update"}}]},
+            },
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"text": {"content": stock}}]},
+            }
+        ]
+
+        if ai_analysis:
+            # Add AI Analysis block
+            children.extend([
+                {
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {"rich_text": [{"text": {"content": "AI Analysis"}}]},
+                },
+                {
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {"rich_text": [{"text": {"content": ai_analysis}}]},
+                }
+            ])
+
+        # Add News block
+        children.extend([
+            {
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {"rich_text": [{"text": {"content": "News Update"}}]},
+            },
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"text": {"content": news}}]},
+            }
+        ])
+
         notion.pages.create(
             parent={"database_id": NOTION_DB_ID},
             properties={
                 "Date": {"date": {"start": today}},
                 "Title": {"title": [{"text": {"content": f"Daily Report - {today}"}}]},
             },
-            children=[
-                {
-                    "object": "block",
-                    "type": "heading_2",
-                    "heading_2": {"rich_text": [{"text": {"content": "Stock Update"}}]},
-                },
-                {
-                    "object": "block",
-                    "type": "paragraph",
-                    "paragraph": {"rich_text": [{"text": {"content": stock}}]},
-                },
-                {
-                    "object": "block",
-                    "type": "heading_2",
-                    "heading_2": {"rich_text": [{"text": {"content": "News Update"}}]},
-                },
-                {
-                    "object": "block",
-                    "type": "paragraph",
-                    "paragraph": {"rich_text": [{"text": {"content": news}}]},
-                },
-            ],
+            children=children,
         )
         print(f"Logged to Notion: {today}")
     except Exception as e:

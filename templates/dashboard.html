@@ -82,6 +82,56 @@
             animation: livePulse 1.5s ease-in-out infinite;
             box-shadow: 0 0 8px #00ff64;
         }
+        .section.ai-section {
+            border: 1px solid rgba(255, 200, 50, 0.3);
+            background: rgba(255, 200, 50, 0.03);
+        }
+        .section.ai-section h2 {
+            background: linear-gradient(90deg, #ffd93d, #ff6b6b, #7b2ff7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .section.knowledge-section {
+            border: 1px solid rgba(0, 210, 255, 0.2);
+            background: rgba(0, 210, 255, 0.03);
+        }
+        .section.knowledge-section h2 {
+            color: #00d2ff;
+        }
+        .kb-form {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .kb-form input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.05);
+            color: #e0e0e0;
+            font-size: 0.9em;
+            outline: none;
+        }
+        .kb-form input:focus {
+            border-color: #00d2ff;
+            box-shadow: 0 0 8px rgba(0,210,255,0.3);
+        }
+        .kb-form button {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(135deg, #00d2ff, #7b2ff7);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: opacity 0.2s;
+        }
+        .kb-form button:hover { opacity: 0.85; }
+        .kb-form button:disabled { opacity: 0.5; cursor: not-allowed; }
         @keyframes livePulse { 0%, 100% { opacity: 1; box-shadow: 0 0 8px #00ff64; } 50% { opacity: 0.4; box-shadow: 0 0 2px #00ff64; } }
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -105,13 +155,29 @@
         <pre id="news" class="loading">⏳ Fetching global news...</pre>
     </div>
 
+    <div class="section ai-section">
+        <h2>🤖 AI Analysis</h2>
+        <pre id="ai-analysis" class="loading">⏳ Generating AI insights...</pre>
+    </div>
+
+    <div class="section knowledge-section">
+        <h2>📚 Knowledge Base (RAG)</h2>
+        <pre id="knowledge-stats" class="loading">⏳ Loading knowledge base...</pre>
+        <div class="kb-form">
+            <input type="text" id="kb-url" placeholder="Paste article URL (e.g., Zerodha Varsity link)" />
+            <input type="text" id="kb-name" placeholder="Source name (optional)" />
+            <button onclick="addKnowledge()">📥 Add to Knowledge</button>
+        </div>
+        <pre id="kb-result" style="display:none; color: #00ff64; margin-top: 10px;"></pre>
+    </div>
+
     <div class="live-bar">
         <span class="live-dot"></span>
         <span>LIVE</span>
         <span id="last-update" style="margin-left: auto; font-size: 0.8em; color: #888;">Updating...</span>
     </div>
 
-    <p class="refresh-note">Prices refresh every 30s. Powered by yfinance + global RSS feeds.</p>
+    <p class="refresh-note">Prices refresh every 30s. AI analysis on load. Powered by yfinance + Gemini + RAG.</p>
 
     <script>
         // Load a section via API with optional flash animation
@@ -140,10 +206,48 @@
                 'Last updated: ' + new Date().toLocaleTimeString();
         }
 
-        // Initial load — all 3 in parallel
+        // Add URL to knowledge base
+        function addKnowledge() {
+            const url = document.getElementById('kb-url').value.trim();
+            const name = document.getElementById('kb-name').value.trim();
+            const btn = document.querySelector('.kb-form button');
+            const result = document.getElementById('kb-result');
+
+            if (!url) { alert('Please enter a URL'); return; }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Indexing...';
+            result.style.display = 'block';
+            result.textContent = '⏳ Fetching and indexing article...';
+
+            const formData = new FormData();
+            formData.append('url', url);
+            if (name) formData.append('name', name);
+
+            fetch('/api/knowledge/add-url', { method: 'POST', body: formData })
+                .then(r => r.text())
+                .then(data => {
+                    result.textContent = data;
+                    btn.disabled = false;
+                    btn.textContent = '📥 Add to Knowledge';
+                    document.getElementById('kb-url').value = '';
+                    document.getElementById('kb-name').value = '';
+                    // Refresh knowledge stats
+                    loadSection('/api/knowledge/stats', 'knowledge-stats', true);
+                })
+                .catch(err => {
+                    result.textContent = '❌ Failed to add. Try again.';
+                    btn.disabled = false;
+                    btn.textContent = '📥 Add to Knowledge';
+                });
+        }
+
+        // Initial load — all sections in parallel
         loadSection('/api/stocks', 'stock', false);
         loadSection('/api/news', 'news', false);
         loadSection('/api/predictions', 'predictions', false);
+        loadSection('/api/ai-analysis', 'ai-analysis', false);
+        loadSection('/api/knowledge/stats', 'knowledge-stats', false);
 
         // Auto-refresh stocks & predictions every 30 seconds
         setInterval(() => {
@@ -156,6 +260,11 @@
         setInterval(() => {
             loadSection('/api/news', 'news', true);
         }, 300000);
+
+        // Refresh AI analysis every 10 minutes
+        setInterval(() => {
+            loadSection('/api/ai-analysis', 'ai-analysis', true);
+        }, 600000);
 
         // Set initial timestamp
         setTimeout(updateTimestamp, 3000);

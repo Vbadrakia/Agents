@@ -15,13 +15,17 @@ def send_message(message):
 
 
 def daily_report():
+    from agents.ai_analyst import get_full_ai_report
+    
     stock = get_stock_update()
     news = get_news_update()
+    ai_analysis = get_full_ai_report()
 
-    final = f"{stock}\n\n{news}"
+    # Send in two parts to avoid Telegram length limit
+    send_message(f"{stock}\n\n{ai_analysis}")
+    send_message(news)
 
-    send_message(final)
-    log_to_notion(stock, news)
+    log_to_notion(stock, news, ai_analysis)
 
 
 schedule.every().day.at("09:00").do(daily_report)
