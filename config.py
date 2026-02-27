@@ -1,7 +1,9 @@
 import os
+from dotenv import load_dotenv
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+load_dotenv()
 
-NOTION_TOKEN = os.getenv("NOTION_TOKEN")
-DATABASE_ID = os.getenv("DATABASE_ID")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+CHAT_ID = os.getenv("CHAT_ID", "")
+NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
+NOTION_DB_ID = os.getenv("NOTION_DB_ID", "")

@@ -1,14 +1,10 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, Response
 import threading
 import schedule
 import time
 import requests
 
 from config import BOT_TOKEN, CHAT_ID
-from agents.stock_agent import get_stock_update
-from agents.news_agent import get_news_update
-from agents.job_agent import get_job_updates
-from notion_logger import log_to_notion
 
 app = Flask(__name__)
 
@@ -18,13 +14,16 @@ def send_message(message):
     requests.post(url, data=payload)
 
 def daily_report():
+    from agents.stock_agent import get_stock_update
+    from agents.news_agent import get_news_update
+    from notion_logger import log_to_notion
+
     stock = get_stock_update()
     news = get_news_update()
-    jobs = get_job_updates()
 
-    final = f"{stock}\n\n{news}\n\n{jobs}"
+    final = f"{stock}\n\n{news}"
     send_message(final)
-    log_to_notion(stock, news, jobs)
+    log_to_notion(stock, news)
 
 def run_scheduler():
     schedule.every().day.at("09:00").do(daily_report)
@@ -35,12 +34,56 @@ def run_scheduler():
 # Start scheduler in background thread
 threading.Thread(target=run_scheduler, daemon=True).start()
 
+
+# ─── Main Dashboard (loads instantly, data fills via AJAX) ───
+
 @app.route("/")
 def dashboard():
-    stock = get_stock_update()
-    news = get_news_update()
-    jobs = get_job_updates()
-    return render_template("dashboard.html", stock=stock, news=news, jobs=jobs)
+    return render_template("dashboard.html")
+
+
+# ─── API Endpoints (called by AJAX from dashboard) ───
+
+@app.route("/api/stocks")
+def api_stocks():
+    from agents.stock_agent import get_stock_update
+    try:
+        data = get_stock_update()
+        return Response(data, mimetype="text/plain")
+    except Exception as e:
+        return Response(f"Error loading stocks: {str(e)}", mimetype="text/plain")
+
+@app.route("/api/news")
+def api_news():
+    from agents.news_agent import get_news_update
+    try:
+        data = get_news_update()
+        return Response(data, mimetype="text/plain")
+    except Exception as e:
+        return Response(f"Error loading news: {str(e)}", mimetype="text/plain")
+
+@app.route("/api/predictions")
+def api_predictions():
+    from agents.stock_agent import get_stock_predictions
+    try:
+        data = get_stock_predictions()
+        return Response(data, mimetype="text/plain")
+    except Exception as e:
+        return Response(f"Error loading predictions: {str(e)}", mimetype="text/plain")
+
+
+# ─── Other Routes ───
+
+@app.route("/predictions")
+def predictions_page():
+    from agents.stock_agent import get_stock_predictions
+    predictions = get_stock_predictions()
+    return f"<pre>{predictions}</pre>"
+
+@app.route("/run-now")
+def run_now():
+    daily_report()
+    return "Report sent!"
 
 if __name__ == "__main__":
     app.run()

@@ -1,27 +1,111 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Command Center</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a2e, #1a1a4e, #0a0a2e);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            background: linear-gradient(90deg, #00d2ff, #7b2ff7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .section {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            backdrop-filter: blur(10px);
+            animation: fadeIn 0.5s ease-in;
+        }
+        .section h2 {
+            font-size: 1.5em;
+            margin-bottom: 15px;
+        }
+        .section.predictions {
+            border: 1px solid rgba(123, 47, 247, 0.3);
+            background: rgba(123, 47, 247, 0.05);
+        }
+        .section.predictions h2 {
+            background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bff6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95em;
+            line-height: 1.6;
+            color: #c0c0c0;
+        }
+        .loading {
+            color: #7b2ff7;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        .refresh-note {
+            text-align: center;
+            color: #666;
+            font-size: 0.85em;
+            margin-top: 20px;
+        }
+        @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
 <body>
+    <h1>🚀 AI Command Center</h1>
 
-<h1>🚀 AI Command Center</h1>
+    <div class="section">
+        <h2>📊 Portfolio</h2>
+        <pre id="stock" class="loading">⏳ Loading stock data...</pre>
+    </div>
 
-<div class="card">
-    <h2>📊 Portfolio</h2>
-    <pre>{{ stock }}</pre>
-</div>
+    <div class="section predictions">
+        <h2>🔮 AI Predictions</h2>
+        <pre id="predictions" class="loading">⏳ Analyzing trends...</pre>
+    </div>
 
-<div class="card">
-    <h2>📰 News</h2>
-    <pre>{{ news }}</pre>
-</div>
+    <div class="section">
+        <h2>📰 News</h2>
+        <pre id="news" class="loading">⏳ Fetching global news...</pre>
+    </div>
 
-<div class="card">
-    <h2>💼 Jobs</h2>
-    <pre>{{ jobs }}</pre>
-</div>
+    <p class="refresh-note">Data refreshes daily. Powered by yfinance + global RSS feeds.</p>
 
+    <script>
+        // Load each section independently via API
+        function loadSection(url, elementId) {
+            fetch(url)
+                .then(response => response.text())
+                .then(data => {
+                    const el = document.getElementById(elementId);
+                    el.textContent = data;
+                    el.classList.remove('loading');
+                })
+                .catch(err => {
+                    const el = document.getElementById(elementId);
+                    el.textContent = '❌ Failed to load. Try refreshing.';
+                    el.classList.remove('loading');
+                });
+        }
+
+        // Fire all 3 requests at the same time (parallel loading)
+        loadSection('/api/stocks', 'stock');
+        loadSection('/api/news', 'news');
+        loadSection('/api/predictions', 'predictions');
+    </script>
 </body>
 </html>

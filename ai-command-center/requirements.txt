@@ -1,9 +1,0 @@
-flask
-yfinance
-feedparser
-requests
-notion-client
-gunicorn
-schedule
-python-dotenv
-pandas
