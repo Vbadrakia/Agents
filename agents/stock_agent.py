@@ -1,115 +1,138 @@
 # agents/stock_agent.py
+# Production-ready stock portfolio module for Flask + Gunicorn
+# No global cache, no in-memory state — fresh data on every request
 
 import yfinance as yf
-import pandas as pd
 from datetime import datetime
-import time
-
-PORTFOLIO = ["TCS.NS", "INFY.NS", "SPICEJET.BO"]
-
-# Cache stock data with TTL (seconds) to avoid excessive API calls
-_stock_cache = {}
-_cache_timestamps = {}  # Per-symbol timestamp
-CACHE_TTL = 60  # Refresh every 60 seconds for live prices
 
 
-def _fetch_stock_data(symbol, period="1d"):
-    """Fetch stock data with TTL-based caching for live prices."""
-    global _stock_cache, _cache_timestamps
+PORTFOLIO = ["SPICEJET.BO", "TCS.NS", "INFY.NS"]
 
-    cache_key = f"{symbol}_{period}"
-    now = time.time()
 
-    # Return cache if still fresh
-    if cache_key in _stock_cache and (now - _cache_timestamps.get(cache_key, 0)) < CACHE_TTL:
-        return _stock_cache[cache_key]
-
+def _fetch_all_stocks(symbols, period="5d"):
+    """
+    Batch-fetch stock data for all symbols in a single yfinance call.
+    Returns a dict of {symbol: DataFrame}.
+    Avoids repeated API calls within the same request.
+    """
+    results = {}
     try:
-        stock = yf.Ticker(symbol)
-        data = stock.history(period=period)
-        _stock_cache[cache_key] = data
-        _cache_timestamps[cache_key] = now
-        return data
+        data = yf.download(symbols, period=period, group_by="ticker", progress=False)
+        for symbol in symbols:
+            try:
+                if len(symbols) == 1:
+                    # yf.download returns flat columns for single ticker
+                    df = data.copy()
+                else:
+                    df = data[symbol].dropna(how="all")
+                if df is not None and len(df) > 0:
+                    results[symbol] = df
+            except Exception:
+                continue
     except Exception as e:
-        print(f"Error fetching {symbol}: {e}")
-        return pd.DataFrame()
+        print(f"Batch download error: {e}")
+        # Fallback: fetch individually
+        for symbol in symbols:
+            try:
+                ticker = yf.Ticker(symbol)
+                df = ticker.history(period=period)
+                if df is not None and len(df) > 0:
+                    results[symbol] = df
+            except Exception:
+                continue
+    return results
+
+
+def _format_volume(vol):
+    """Format volume with commas for readability."""
+    try:
+        return f"{int(vol):,}"
+    except (ValueError, TypeError):
+        return "N/A"
 
 
 def get_stock_update():
-    """Fetches live stock prices with smart trend analysis."""
-    message = f"📊 Live Portfolio ({datetime.now().strftime('%d-%m-%Y %H:%M:%S')})\n\n"
+    """
+    Fetches LIVE stock prices. No caching — always fresh data.
+    Returns a clean formatted string for Flask <pre> rendering.
+    """
+    now = datetime.now()
+    message = f"📊 Portfolio Update ({now.strftime('%d-%m-%Y')})\n"
+
+    # Single batch API call for all stocks
+    stock_data = _fetch_all_stocks(PORTFOLIO, period="5d")
 
     for symbol in PORTFOLIO:
+        message += "\n"
+
+        if symbol not in stock_data or len(stock_data[symbol]) == 0:
+            message += f"{symbol}\n⚠️ Data unavailable — market may be closed or ticker delisted.\n"
+            continue
+
         try:
-            data = _fetch_stock_data(symbol, period="5d")
+            df = stock_data[symbol]
+            latest = df.iloc[-1]
 
-            if len(data) == 0:
-                message += f"{symbol} → No data available\n\n"
-                continue
-
-            latest = data.iloc[-1]
-            current = latest["Close"]
-            open_price = latest["Open"]
+            current = float(latest["Close"])
+            open_price = float(latest["Open"])
+            high = float(latest["High"])
+            low = float(latest["Low"])
+            volume = latest["Volume"]
 
             change = current - open_price
-            percent = (change / open_price) * 100
+            percent = (change / open_price) * 100 if open_price != 0 else 0
 
-            arrow = "🔺" if change > 0 else "🔻"
+            arrow = "🔺" if change >= 0 else "🔻"
+            sign = "+" if change >= 0 else ""
 
-            # Get trend from MA analysis (uses cached data, no extra API call)
-            trend = "N/A"
-            if len(data) >= 50:
-                data_copy = data.copy()
-                data_copy["MA20"] = data_copy["Close"].rolling(20).mean()
-                data_copy["MA50"] = data_copy["Close"].rolling(50).mean()
-                last = data_copy.iloc[-1]
-                if pd.notna(last["MA20"]) and pd.notna(last["MA50"]):
-                    trend = "Bullish 📈" if last["MA20"] > last["MA50"] else "Bearish 📉"
-            elif len(data) >= 20:
-                data_copy = data.copy()
-                data_copy["MA20"] = data_copy["Close"].rolling(20).mean()
-                last = data_copy.iloc[-1]
-                if pd.notna(last["MA20"]):
-                    trend = "Bullish 📈" if current > last["MA20"] else "Bearish 📉"
-
-            message += f"{symbol}\n₹{current:.2f} {arrow} {percent:.2f}%\nTrend: {trend}\n\n"
+            message += f"{symbol}\n"
+            message += f"₹{current:.2f} {arrow} {sign}{change:.2f} ({sign}{percent:.2f}%)\n"
+            message += f"Open: ₹{open_price:.2f}\n"
+            message += f"High: ₹{high:.2f}\n"
+            message += f"Low:  ₹{low:.2f}\n"
+            message += f"Volume: {_format_volume(volume)}\n"
 
         except Exception as e:
-            message += f"{symbol} → Error: {str(e)}\n\n"
+            message += f"{symbol}\n❌ Error: {str(e)}\n"
 
     return message
 
 
-def get_stock_predictions(news_headlines=None):
-    """Get smart stock predictions based on moving average analysis."""
-    today = datetime.now().strftime("%d-%m-%Y")
-    result = f"🔮 Smart Stock Analysis ({today})\n"
+def get_stock_predictions():
+    """
+    Stock predictions based on moving average analysis.
+    Uses 6mo data for MA20/MA50. No caching.
+    """
+    import pandas as pd
+
+    now = datetime.now()
+    result = f"🔮 Smart Stock Analysis ({now.strftime('%d-%m-%Y')})\n"
     result += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 
+    # Single batch API call — 6 months for MA analysis
+    stock_data = _fetch_all_stocks(PORTFOLIO, period="6mo")
+
     for symbol in PORTFOLIO:
+        if symbol not in stock_data or len(stock_data[symbol]) < 20:
+            result += f"\n📌 {symbol}\n   Not enough data for analysis\n"
+            result += "─────────────────────────────\n"
+            continue
+
         try:
-            # Uses 6mo data for MA analysis
-            data = _fetch_stock_data(symbol, period="6mo")
+            data = stock_data[symbol].copy()
+            data["MA7"] = data["Close"].rolling(7).mean()
+            data["MA20"] = data["Close"].rolling(20).mean()
 
-            if len(data) < 20:
-                result += f"\n📌 {symbol}\n   Not enough data for analysis\n"
-                result += "─────────────────────────────\n"
-                continue
-
-            data_copy = data.copy()
-            data_copy["MA7"] = data_copy["Close"].rolling(7).mean()
-            data_copy["MA20"] = data_copy["Close"].rolling(20).mean()
-
-            latest = data_copy.iloc[-1]
-            current = latest["Close"]
+            latest = data.iloc[-1]
+            current = float(latest["Close"])
 
             # Trend detection
             trend = "Neutral ➡️"
             recommendation = "HOLD"
 
             if len(data) >= 50:
-                data_copy["MA50"] = data_copy["Close"].rolling(50).mean()
-                latest = data_copy.iloc[-1]
+                data["MA50"] = data["Close"].rolling(50).mean()
+                latest = data.iloc[-1]
 
                 if pd.notna(latest["MA20"]) and pd.notna(latest["MA50"]):
                     if latest["MA20"] > latest["MA50"]:
@@ -133,13 +156,13 @@ def get_stock_predictions(news_headlines=None):
 
             # Volume analysis
             avg_vol = data["Volume"].tail(20).mean()
-            latest_vol = data.iloc[-1]["Volume"]
+            latest_vol = float(data.iloc[-1]["Volume"])
             vol_change = ((latest_vol - avg_vol) / avg_vol * 100) if avg_vol > 0 else 0
 
-            # Price change (last 7 days)
+            # Weekly price change
             if len(data) >= 7:
-                week_ago_price = data.iloc[-7]["Close"]
-                weekly_change = ((current - week_ago_price) / week_ago_price) * 100
+                week_ago = float(data.iloc[-7]["Close"])
+                weekly_change = ((current - week_ago) / week_ago) * 100
                 weekly_str = f"{weekly_change:+.2f}%"
             else:
                 weekly_str = "N/A"
@@ -157,3 +180,8 @@ def get_stock_predictions(news_headlines=None):
             result += "─────────────────────────────\n"
 
     return result
+
+
+def get_news_headlines():
+    """Returns raw headline list for stock-related news. Stub for compatibility."""
+    return []
