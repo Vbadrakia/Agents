@@ -127,8 +127,11 @@ def api_ai_analysis():
             
         import time, datetime
         mtime = os.path.getmtime(cache_file)
-        dt = datetime.datetime.fromtimestamp(mtime).strftime('%H:%M:%S')
-        data += f"\n\n🕒 Background Report generated at {dt} (Auto-updates every 15 mins)"
+        # Explicitly convert to IST (UTC +5:30) since the python env is defaulting to UTC
+        utc_dt = datetime.datetime.utcfromtimestamp(mtime)
+        ist_dt = utc_dt + datetime.timedelta(hours=5, minutes=30)
+        dt_str = ist_dt.strftime('%I:%M %p')
+        data += f"\n\n🕒 Background Report generated at {dt_str} (Auto-updates every 15 mins)"
         return Response(data, mimetype="text/plain")
     else:
         return Response("⏳ AI Analysis is generating in the background... Please check back in a minute.", mimetype="text/plain")
