@@ -7,7 +7,7 @@ import yfinance as yf
 from datetime import datetime
 
 
-PORTFOLIO = ["SPICEJET.NS"]
+PORTFOLIO = ["SPICEJET.NS", "RELINFRA.NS"]
 
 
 def _fetch_all_stocks(symbols, period="5d"):
