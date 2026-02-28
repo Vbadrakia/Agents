@@ -1,0 +1,9 @@
+🤖 AI Analysis Unavailable
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Gemini API key not configured.
+
+To enable AI analysis:
+1. Get a free API key from https://aistudio.google.com/
+2. Add GEMINI_API_KEY=your_key to your .env file
+3. Restart the server
