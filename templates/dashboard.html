@@ -264,11 +264,27 @@
         loadSection('/api/ai-analysis', 'ai-analysis', false);
         loadSection('/api/knowledge/stats', 'knowledge-stats', false);
 
-        // Auto-refresh stocks & predictions every 10 seconds
+        // Auto-refresh stocks & predictions every 10 seconds (Only on Weekdays)
         setInterval(() => {
-            loadSection('/api/stocks', 'stock', true);
-            loadSection('/api/predictions', 'predictions', true);
-            updateTimestamp();
+            const now = new Date();
+            const day = now.getDay(); // 0 = Sunday, 6 = Saturday
+            
+            // If it's Mon-Fri, refresh normally
+            if (day !== 0 && day !== 6) {
+                loadSection('/api/stocks', 'stock', true);
+                loadSection('/api/predictions', 'predictions', true);
+                updateTimestamp();
+            } else {
+                // If it's the weekend, stop refreshing and show "Market Closed"
+                document.getElementById('last-update').textContent = 'Market Closed (Weekend)';
+                // Turn off the glowing green "LIVE" dot
+                const liveDot = document.querySelector('.live-dot');
+                if (liveDot) {
+                    liveDot.style.background = '#888';
+                    liveDot.style.boxShadow = 'none';
+                    liveDot.style.animation = 'none';
+                }
+            }
         }, 10000);
 
         // Refresh everything else (news, AI analysis, knowledge stats) every 10 minutes
