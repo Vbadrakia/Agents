@@ -89,7 +89,7 @@ def api_stocks():
 
 @app.route("/api/news")
 def api_news():
-     from agents.news_agent import get_news_update
+    from agents.news_agent import get_news_update
     try:
         data = get_news_update()
         return Response(data, mimetype="text/plain")
