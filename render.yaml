@@ -3,4 +3,4 @@ services:
     name: ai-command-center
     runtime: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn app:app"
+    startCommand: "gunicorn app:app --workers 1 --threads 4 --timeout 120"
