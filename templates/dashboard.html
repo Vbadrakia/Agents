@@ -257,12 +257,12 @@
                 });
         }
 
-        // Initial load — all sections in parallel
+        // Initial load — staggered to prevent overloading the server
         loadSection('/api/stocks', 'stock', false);
-        loadSection('/api/news', 'news', false);
-        loadSection('/api/predictions', 'predictions', false);
-        loadSection('/api/ai-analysis', 'ai-analysis', false);
-        loadSection('/api/knowledge/stats', 'knowledge-stats', false);
+        setTimeout(() => loadSection('/api/predictions', 'predictions', false), 500);
+        setTimeout(() => loadSection('/api/knowledge/stats', 'knowledge-stats', false), 1000);
+        setTimeout(() => loadSection('/api/news', 'news', false), 1500);
+        setTimeout(() => loadSection('/api/ai-analysis', 'ai-analysis', false), 2000);
 
         // Auto-refresh stocks & predictions every 10 seconds (Only on Weekdays)
         setInterval(() => {
