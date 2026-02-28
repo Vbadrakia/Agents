@@ -29,8 +29,33 @@ def daily_report():
     
     log_to_notion(stock, news, ai_analysis)
 
+def update_ai_analysis_cache():
+    import os, time
+    from agents.ai_analyst import get_full_ai_report
+    
+    # Prevent duplicate generation if cached recently (<14 minutes ago)
+    cache_file = os.path.join("knowledge", "latest_ai_analysis.txt")
+    if os.path.exists(cache_file):
+        if time.time() - os.path.getmtime(cache_file) < 14 * 60:
+            return 
+            
+    try:
+        data = get_full_ai_report()
+        os.makedirs("knowledge", exist_ok=True)
+        with open(cache_file, "w", encoding="utf-8") as f:
+            f.write(data)
+    except Exception as e:
+        print(f"Background AI cache error: {e}")
+
 def run_scheduler():
     schedule.every().day.at("09:00").do(daily_report)
+    schedule.every(15).minutes.do(update_ai_analysis_cache)
+    
+    # Trigger initial generation if no cache exists
+    import os
+    if not os.path.exists(os.path.join("knowledge", "latest_ai_analysis.txt")):
+        threading.Thread(target=update_ai_analysis_cache, daemon=True).start()
+
     while True:
         schedule.run_pending()
         time.sleep(60)
@@ -77,12 +102,36 @@ def api_predictions():
 
 @app.route("/api/ai-analysis")
 def api_ai_analysis():
-    from agents.ai_analyst import get_full_ai_report
-    try:
-        data = get_full_ai_report()
+    import os
+    from flask import request
+    
+    force = request.args.get("force", "false").lower() == "true"
+    cache_file = os.path.join("knowledge", "latest_ai_analysis.txt")
+    
+    # If explicit manual refresh is requested
+    if force:
+        from agents.ai_analyst import get_full_ai_report
+        try:
+            data = get_full_ai_report()
+            os.makedirs("knowledge", exist_ok=True)
+            with open(cache_file, "w", encoding="utf-8") as f:
+                f.write(data)
+            return Response(data, mimetype="text/plain")
+        except Exception as e:
+            return Response(f"Error loading AI analysis: {str(e)}", mimetype="text/plain")
+
+    # Background cache mode
+    if os.path.exists(cache_file):
+        with open(cache_file, "r", encoding="utf-8") as f:
+            data = f.read()
+            
+        import time, datetime
+        mtime = os.path.getmtime(cache_file)
+        dt = datetime.datetime.fromtimestamp(mtime).strftime('%H:%M:%S')
+        data += f"\n\n🕒 Background Report generated at {dt} (Auto-updates every 15 mins)"
         return Response(data, mimetype="text/plain")
-    except Exception as e:
-        return Response(f"Error loading AI analysis: {str(e)}", mimetype="text/plain")
+    else:
+        return Response("⏳ AI Analysis is generating in the background... Please check back in a minute.", mimetype="text/plain")
 
 @app.route("/api/knowledge/stats")
 def api_knowledge_stats():
