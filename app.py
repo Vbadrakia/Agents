@@ -41,6 +41,11 @@ def update_ai_analysis_cache():
             
     try:
         data = get_full_ai_report()
+        # Ensure we do NOT cache rate-limit warnings permanently!
+        if "Rate limit reached" in data or "Error" in data:
+            print("Skipping cache write due to API limits or errors.")
+            return
+
         os.makedirs("knowledge", exist_ok=True)
         with open(cache_file, "w", encoding="utf-8") as f:
             f.write(data)
@@ -113,9 +118,12 @@ def api_ai_analysis():
         from agents.ai_analyst import get_full_ai_report
         try:
             data = get_full_ai_report()
-            os.makedirs("knowledge", exist_ok=True)
-            with open(cache_file, "w", encoding="utf-8") as f:
-                f.write(data)
+            
+            # Use a fail-safe: don't overwrite the cache if explicitly rate limited.
+            if "Rate limit reached" not in data:
+                os.makedirs("knowledge", exist_ok=True)
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    f.write(data)
                 
             import time, datetime
             mtime = os.path.getmtime(cache_file)
