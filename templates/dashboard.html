@@ -156,7 +156,22 @@
     </div>
 
     <div class="section ai-section">
-        <h2>🤖 AI Analysis</h2>
+        <h2 style="display: flex; justify-content: space-between; align-items: center;">
+            <span>🤖 AI Analysis</span>
+            <button onclick="loadSection('/api/ai-analysis', 'ai-analysis', true)" style="
+                background: linear-gradient(135deg, #ffd93d, #ff6b6b);
+                color: #1a1a4e;
+                border: none;
+                padding: 5px 12px;
+                border-radius: 6px;
+                font-size: 0.7em;
+                font-weight: bold;
+                cursor: pointer;
+                transition: opacity 0.2s;
+            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                🔄 Refresh AI
+            </button>
+        </h2>
         <pre id="ai-analysis" class="loading">⏳ Generating AI insights...</pre>
     </div>
 
@@ -249,21 +264,18 @@
         loadSection('/api/ai-analysis', 'ai-analysis', false);
         loadSection('/api/knowledge/stats', 'knowledge-stats', false);
 
-        // Auto-refresh stocks & predictions every 30 seconds
+        // Auto-refresh stocks & predictions every 10 seconds
         setInterval(() => {
             loadSection('/api/stocks', 'stock', true);
             loadSection('/api/predictions', 'predictions', true);
             updateTimestamp();
-        }, 30000);
+        }, 10000);
 
-        // Refresh news every 5 minutes
+        // Refresh everything else (news, AI analysis, knowledge stats) every 10 minutes
         setInterval(() => {
             loadSection('/api/news', 'news', true);
-        }, 300000);
-
-        // Refresh AI analysis every 10 minutes
-        setInterval(() => {
             loadSection('/api/ai-analysis', 'ai-analysis', true);
+            loadSection('/api/knowledge/stats', 'knowledge-stats', true);
         }, 600000);
 
         // Set initial timestamp
